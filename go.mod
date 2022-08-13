@@ -1,4 +1,4 @@
-module github.com/jinzhu/configor
+module github.com/Daydaylw3/configor
 
 go 1.16
 
