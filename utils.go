@@ -63,7 +63,7 @@ func (c *Configor) getConfigurationFileWithENVPrefix(file, env string) (string, 
 	return "", time.Now(), fmt.Errorf("failed to find file %v", file)
 }
 
-func (configor *Configor) getConfigurationFiles(config *Config, watchMode bool, files ...string) ([]string, map[string]time.Time) {
+func (configor *Configor) getConfigurationFiles(config *Config, watchMode bool, files ...string) ([]string, map[string]time.Time, error) {
 	stat := os.Stat
 	if config.FS != nil {
 		stat = func(name string) (os.FileInfo, error) {
@@ -89,27 +89,11 @@ func (configor *Configor) getConfigurationFiles(config *Config, watchMode bool, 
 			results[file] = fileInfo.ModTime()
 		}
 
-		// check configuration with env
-		if file, modTime, err := configor.getConfigurationFileWithENVPrefix(file, configor.GetEnvironment()); err == nil {
-			foundFile = true
-			resultKeys = append(resultKeys, file)
-			results[file] = modTime
-		}
-
-		// check example configuration
 		if !foundFile {
-			if example, modTime, err := configor.getConfigurationFileWithENVPrefix(file, "example"); err == nil {
-				if !watchMode && !configor.Silent {
-					fmt.Printf("Failed to find configuration %v, using example file %v\n", file, example)
-				}
-				resultKeys = append(resultKeys, example)
-				results[example] = modTime
-			} else if !configor.Silent {
-				fmt.Printf("Failed to find configuration %v\n", file)
-			}
+			return nil, nil, fmt.Errorf("failed to find configuration %s", file)
 		}
 	}
-	return resultKeys, results
+	return resultKeys, results, nil
 }
 
 func (c *Configor) processFile(config interface{}, file string, errorOnUnmatchedKeys bool) error {
@@ -356,17 +340,10 @@ func (configor *Configor) processTags(config interface{}, prefixes ...string) er
 }
 
 func (configor *Configor) load(config interface{}, watchMode bool, files ...string) (err error, changed bool) {
-	defer func() {
-		if configor.Config.Debug || configor.Config.Verbose {
-			if err != nil {
-				fmt.Printf("Failed to load configuration from %v, got %v\n", files, err)
-			}
-
-			fmt.Printf("Configuration:\n  %#v\n", config)
-		}
-	}()
-
-	configFiles, configModTimeMap := configor.getConfigurationFiles(configor.Config, watchMode, files...)
+	configFiles, configModTimeMap, err := configor.getConfigurationFiles(configor.Config, watchMode, files...)
+	if err != nil {
+		return err, false
+	}
 
 	if watchMode {
 		if len(configModTimeMap) == len(configor.configModTimes) {
